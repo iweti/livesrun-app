@@ -29,6 +29,8 @@ npm run format:check
 
 O backend fica em [iweti/livesrun-api](https://github.com/iweti/livesrun-api). A integração do aplicativo permanece desativada por padrão (`EXPO_PUBLIC_ENABLE_API=false`). Para desenvolvimento com API local, use `apps/mobile/.env.example` como referência. Em aparelho físico, a URL deve ser alcançável pelo dispositivo.
 
+Ao testar a integração, use uma versão da API que ofereça `GET /v1/sync-session`. O app confirma a sessão antes de enviar treinos e mantém a fila local quando perde a conexão. No app nativo, uma sessão verificada e ainda válida permite recuperar o treino salvo mesmo com a API indisponível. Consulte o [contrato HTTP](https://github.com/iweti/livesrun-api/blob/main/docs/api.md) e o [checklist do beta](https://github.com/iweti/livesrun-api/blob/main/docs/beta-checklist.md).
+
 O repositório é privado na organização IWETI. Nenhum banco Neon está conectado ao MVP.
 
 ![Prévia móvel com dados fictícios](docs/screenshots/mobile-preview.png)

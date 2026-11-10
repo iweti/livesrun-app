@@ -20,6 +20,7 @@ export const auth = createAuthClient({
 export const useAppSession = API_ENABLED
   ? auth.useSession
   : () => ({ data: null, isPending: false });
+export type AppSession = NonNullable<ReturnType<typeof useAppSession>['data']>;
 export async function request<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   if (!API_ENABLED) throw new Error('Este MVP usa dados fictícios e não está conectado a uma API.');
   const headers = new Headers(options.headers);
