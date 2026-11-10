@@ -1,0 +1,45 @@
+{
+  "name": "@livesrun/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "web": "expo start --web --port 8081",
+    "typecheck": "tsc --noEmit",
+    "export:web": "expo export --platform web",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "@better-auth/expo": "1.7.10",
+    "@expo/vector-icons": "^15.0.0",
+    "@livesrun/core": "*",
+    "better-auth": "1.7.10",
+    "expo": "~55.0.31",
+    "expo-constants": "~55.0.17",
+    "expo-crypto": "~55.0.19",
+    "expo-dev-client": "~55.0.40",
+    "expo-file-system": "~55.0.26",
+    "expo-linking": "~55.0.17",
+    "expo-location": "~55.1.14",
+    "expo-network": "~55.0.18",
+    "expo-secure-store": "~55.0.18",
+    "expo-sharing": "~55.0.24",
+    "expo-sqlite": "~55.0.20",
+    "expo-status-bar": "~55.0.6",
+    "expo-task-manager": "~55.0.20",
+    "expo-web-browser": "~55.0.20",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-native": "0.83.2",
+    "react-native-maps": "1.27.2",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-svg": "15.15.3",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2"
+  }
+}

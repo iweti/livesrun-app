@@ -1,0 +1,29 @@
+{
+  "name": "livesrun-app",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/mobile",
+    "packages/core"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "npm run web -w @livesrun/mobile",
+    "mobile": "npm run start -w @livesrun/mobile",
+    "web": "npm run web -w @livesrun/mobile",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "npm run export:web -w @livesrun/mobile"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "type": "module"
+}
