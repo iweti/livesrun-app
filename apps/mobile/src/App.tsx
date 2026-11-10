@@ -2,7 +2,7 @@ import { API_ENABLED } from './features';
 import { styles, color } from './theme';
 import { Icon, Button, Field, Footer, Brand, Section, Empty, Stat, Card } from './components/ui';
 import AuthScreen from './AuthScreen';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,10 +21,17 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import * as Network from 'expo-network';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
-import { auth, useAppSession, request, json, API_URL } from './auth';
+import { auth, useAppSession, request, json, API_URL, type AppSession } from './auth';
 import { listRuns, pointsFor, getRun, deleteRun, clearOwner, type LocalRun } from './storage';
-import { startRun, pauseRun, resumeRun, finishRun, recoverRun, stopCapture } from './tracker';
-import { syncPending } from './sync';
+import {
+  startRun,
+  pauseRun,
+  resumeRun,
+  finishRun,
+  recoverLocalWorkout,
+  stopCapture,
+} from './tracker';
+import { createSyncQueue } from './sync';
 import {
   calculateMetrics,
   formatDistance,
@@ -77,8 +84,30 @@ async function confirmAction(title: string, text: string) {
 
 export default function App() {
   const { data: session, isPending } = useAppSession();
-  const [demo, setDemo] = useState(!API_ENABLED),
-    [page, setPage] = useState<Page>('home');
+  const [demo, setDemo] = useState(!API_ENABLED);
+  return (
+    <AppScreen
+      key={demo ? 'demo' : (session?.session.id ?? 'signed-out')}
+      session={session}
+      isPending={isPending}
+      demo={demo}
+      setDemo={setDemo}
+    />
+  );
+}
+
+function AppScreen({
+  session,
+  isPending,
+  demo,
+  setDemo,
+}: {
+  session: AppSession | null;
+  isPending: boolean;
+  demo: boolean;
+  setDemo: (demo: boolean) => void;
+}) {
+  const [page, setPage] = useState<Page>('home');
   const [profile, setProfile] = useState<Profile | null>(null),
     [feed, setFeed] = useState<ActivitySummary[]>([]),
     [history, setHistory] = useState<ActivitySummary[]>([]),
@@ -121,6 +150,11 @@ export default function App() {
     [editHandle, setEditHandle] = useState(''),
     [editBio, setEditBio] = useState('');
   const owner = demo ? 'demo' : session?.user.id;
+  const verifiedOwner = !demo && session?.user.emailVerified ? session.user.id : undefined;
+  const [syncQueue] = useState(() =>
+    !demo && session ? createSyncQueue(session.user.id, session.session.id) : null,
+  );
+  const syncPaused = useRef(false);
   const notify = (text: string, error = false) => {
     setMessage(text);
     setFailure(error);
@@ -155,33 +189,66 @@ export default function App() {
     const p = await request<Profile>('/v1/me');
     setProfile(p);
     setWeeklyTotals(await request('/v1/me/weekly'));
-    const [activities, posts, local] = await Promise.all([
+    const [activities, posts] = await Promise.all([
       request<{ items: ActivitySummary[]; nextCursor: string | null }>('/v1/activities'),
       request<{ items: ActivitySummary[]; nextCursor: string | null }>(
         `/v1/feed?discover=${discover}`,
       ),
-      listRuns(session.user.id),
     ]);
     setHistory(activities.items);
     setHistoryCursor(activities.nextCursor);
     setFeed(posts.items);
     setFeedCursor(posts.nextCursor);
-    setPending(local.filter((r) => r.status === 'finished' && !r.synced));
-    const active = local.find((r) => r.status !== 'finished');
-    if (active) {
-      setRun(await recoverRun(active.id));
-      setRunPoints(await pointsFor(active.id));
-    }
   }, [demo, session?.user.id, session?.user.emailVerified, discover]);
+  const refreshPending = useCallback(async () => {
+    if (!verifiedOwner) return;
+    const runs = await listRuns(verifiedOwner);
+    setPending(runs.filter((r) => r.status === 'finished' && !r.synced));
+  }, [verifiedOwner]);
+  const syncWorkouts = useCallback(async () => {
+    if (!verifiedOwner || !syncQueue || syncPaused.current) return;
+    try {
+      await syncQueue.sync();
+    } finally {
+      if (!syncPaused.current) await refreshPending();
+    }
+  }, [verifiedOwner, syncQueue, refreshPending]);
+  useLayoutEffect(() => {
+    syncPaused.current = false;
+    return () => {
+      syncPaused.current = true;
+      void syncQueue?.cancel();
+    };
+  }, [syncQueue]);
+  useEffect(() => {
+    if (!verifiedOwner) return;
+    let mounted = true;
+    void recoverLocalWorkout(verifiedOwner)
+      .then((local) => {
+        if (!mounted || !local) return;
+        setRun(local.run);
+        setRunPoints(local.points);
+        setTick(Date.now());
+      })
+      .catch(() => {
+        if (mounted) notify('Não foi possível recuperar o treino salvo no aparelho.', true);
+      });
+    void refreshPending().catch(() => {
+      if (mounted) notify('Não foi possível ler os treinos pendentes no aparelho.', true);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [verifiedOwner, refreshPending]);
   useEffect(() => {
     void load().catch((e) => notify(e.message, true));
   }, [load]);
   useEffect(() => {
-    if (!owner || demo) return;
-    const sync = () =>
-      void syncPending(owner)
-        .then(load)
-        .catch(() => {});
+    if (!verifiedOwner) return;
+    const sync = async () => {
+      await syncWorkouts().catch(() => {});
+      if (!syncPaused.current) await load().catch(() => {});
+    };
     sync();
     const app = AppState.addEventListener('change', (state) => {
       if (state === 'active') sync();
@@ -193,7 +260,7 @@ export default function App() {
       app.remove();
       network.remove();
     };
-  }, [owner, demo, load]);
+  }, [verifiedOwner, syncWorkouts, load]);
   useEffect(() => {
     if (!run || run.status === 'finished') return;
     const timer = setInterval(() => {
@@ -238,6 +305,17 @@ export default function App() {
           (await request<{ points: TrackPoint[] }>(`/v1/activities/${activity.id}/route`)).points,
         );
     });
+  }
+  async function signOut() {
+    syncPaused.current = true;
+    try {
+      await syncQueue?.cancel();
+      const { error } = await auth.signOut();
+      if (error) throw new Error(error.message ?? 'Não foi possível sair da conta.');
+    } catch (error) {
+      syncPaused.current = false;
+      throw error;
+    }
   }
   async function like(activity: ActivitySummary) {
     if (!requireLive()) return;
@@ -376,7 +454,7 @@ export default function App() {
                     })
                   }
                 />
-                <Button label="Sair" variant="ghost" onPress={() => void auth.signOut()} />
+                <Button label="Sair" variant="ghost" onPress={() => void perform(signOut)} />
               </View>
             ) : (
               <AuthScreen
@@ -979,15 +1057,15 @@ export default function App() {
                               if (saved) {
                                 notify('Treino salvo no aparelho. Sincronizando…');
                                 try {
-                                  await syncPending(owner!);
+                                  await syncWorkouts();
                                   notify('Mais uma história registrada. Seu treino está privado.');
                                 } catch {
                                   notify(
                                     'Treino salvo no aparelho. A sincronização será retomada quando a conexão voltar.',
                                   );
                                 }
-                                await load();
                                 setPage('history');
+                                await load().catch(() => {});
                               }
                             })
                           }
@@ -1043,7 +1121,7 @@ export default function App() {
                         label="Sincronizar agora"
                         onPress={() =>
                           void perform(async () => {
-                            await syncPending(owner!);
+                            await syncWorkouts();
                             await load();
                             notify('Histórico atualizado.');
                           })
@@ -1337,7 +1415,7 @@ export default function App() {
                             } else {
                               if (run)
                                 throw new Error('Conclua ou descarte o treino antes de sair.');
-                              await auth.signOut();
+                              await signOut();
                             }
                             setProfile(null);
                             setFeed([]);
@@ -1359,13 +1437,20 @@ export default function App() {
                                   'Sua conta, atividades e interações serão removidas. Exporte seus dados primeiro se desejar.',
                                 )
                               ) {
-                                await stopCapture();
-                                await request('/v1/me', {
-                                  method: 'DELETE',
-                                  body: json({ confirmation: 'EXCLUIR' }),
-                                });
-                                await clearOwner(owner!);
-                                await auth.signOut();
+                                syncPaused.current = true;
+                                try {
+                                  await syncQueue?.cancel();
+                                  await stopCapture();
+                                  await request('/v1/me', {
+                                    method: 'DELETE',
+                                    body: json({ confirmation: 'EXCLUIR' }),
+                                  });
+                                  await clearOwner(owner!);
+                                  await signOut();
+                                } catch (error) {
+                                  syncPaused.current = false;
+                                  throw error;
+                                }
                                 setProfile(null);
                                 setRun(null);
                                 setHistory([]);

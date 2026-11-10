@@ -13,10 +13,13 @@ const p = (seq: number, longitude = seq * 0.0001, extra: Partial<TrackPoint> = {
 describe('measured movement', () => {
   it('calculates distance, active time, pace and speed', () => {
     const result = calculateMetrics([p(0), p(1), p(2)], [{ start, end: start + 20000 }]);
-    expect(result.distanceMeters).toBe(22);
-    expect(result.durationSeconds).toBe(20);
-    expect(result.paceSecondsPerKm).toBeGreaterThan(890);
-    expect(result.speedKmh).toBe(4);
+    expect(result).toEqual({
+      distanceMeters: 22,
+      durationSeconds: 20,
+      paceSecondsPerKm: 899,
+      speedKmh: 4,
+      hasGaps: false,
+    });
   });
   it('does not bridge a pause', () => {
     expect(
@@ -26,12 +29,24 @@ describe('measured movement', () => {
           { start, end: start + 10000 },
           { start: start + 20000, end: start + 30000 },
         ],
-      ).distanceMeters,
-    ).toBe(22);
+      ),
+    ).toEqual({
+      distanceMeters: 22,
+      durationSeconds: 20,
+      paceSecondsPerKm: 899,
+      speedKmh: 4,
+      hasGaps: false,
+    });
   });
   it('excludes poor GPS and splits the visible path', () => {
     const points = [p(0), p(1, 0.0001, { accuracy: 100 }), p(2, 0.0002), p(3, 0.0003)];
-    expect(calculateMetrics(points, [{ start, end: start + 30000 }]).distanceMeters).toBe(11);
+    expect(calculateMetrics(points, [{ start, end: start + 30000 }])).toEqual({
+      distanceMeters: 11,
+      durationSeconds: 30,
+      paceSecondsPerKm: 2698,
+      speedKmh: 1.3,
+      hasGaps: true,
+    });
     expect(routeSegments(points)).toHaveLength(2);
   });
   it('does not invent distance over a time gap', () => {
