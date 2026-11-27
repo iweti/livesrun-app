@@ -7,7 +7,7 @@
     "packages/core"
   ],
   "engines": {
-    "node": ">=22.13"
+    "node": "26.x"
   },
   "scripts": {
     "dev": "npm run web -w @livesrun/mobile",

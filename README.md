@@ -6,7 +6,7 @@ MVP navegável para validar a identidade e a experiência da LivesRun. Abre dire
 
 ## Executar
 
-Requisitos: Node.js 24 e npm.
+Requisitos: Node.js 26 e npm.
 
 ```sh
 npm ci
